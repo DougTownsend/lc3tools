@@ -1,0 +1,5 @@
+Metadata-Version: 2.4
+Name: lc3py
+Version: 0.1.0
+Summary: Python bindings for LC-3 Tools
+Requires-Python: >=3.7
