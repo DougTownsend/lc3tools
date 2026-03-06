@@ -6,6 +6,7 @@
 
 #include <string>
 #include <vector>
+#include <cstdio>
 
 std::vector<std::pair<std::string, std::string>> parseCLIArgs(int argc, char * argv[]);
 

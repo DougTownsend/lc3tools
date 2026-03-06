@@ -12,6 +12,9 @@ class Simulator:
 
     def read(self):
         return self.output.read()
+
+    def print(self):
+        print(self.read())
     
     def write(self, str):
         self.input.set_input(str)

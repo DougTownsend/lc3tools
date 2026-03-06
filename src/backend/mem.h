@@ -6,6 +6,7 @@
 
 #include <string>
 #include <iostream>
+#include <cstdio>
 
 namespace lc3
 {
