@@ -34,6 +34,7 @@ public:
             c = buffer[idx++];
             return true;
         } else {
+            throw(std::runtime_error("Input buffer is empty."));
             return false;
         }
     }
