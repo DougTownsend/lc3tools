@@ -4,11 +4,13 @@ import time
 
 class Simulator:
 
-    def __init__(self):
+    def __init__(self, rand=False):
         self.input = Inputter()
         self.output = Printer()
         self.asm = Assembler(self.output, 4)
         self.sim = _Simulator(self.output, self.input, 1)
+        if rand:
+            self.randomize()
 
     def read(self):
         return self.output.read()
