@@ -5,6 +5,29 @@
 
 namespace py = pybind11;
 
+int asm_main(int argc, char **argv);
+int sim_main(int argc, char **argv);
+
+int asm_main_py(std::vector<std::string> args){
+    int argc = static_cast<int>(args.size());
+    std::vector<char*> argv;
+    for (const auto& arg : args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+
+    return asm_main(argc, argv.data());
+}
+
+int sim_main_py(std::vector<std::string> args){
+    int argc = static_cast<int>(args.size());
+    std::vector<char*> argv;
+    for (const auto& arg : args) {
+        argv.push_back(const_cast<char*>(arg.c_str()));
+    }
+
+    return sim_main(argc, argv.data());
+}
+
 // Concrete implementation of IPrinter
 class PythonPrinter : public lc3::utils::IPrinter{
 public:
@@ -50,8 +73,24 @@ public:
     bool hasRemaining(void) const override { return false; }
 };
 
+PYBIND11_MODULE(cli_bindings, m) {
+
+    m.def("asm_main", [](std::vector<std::string> args) {
+        // ... conversion logic ...
+        return asm_main_py(args);
+    });
+    
+    m.def("sim_main", [](std::vector<std::string> args) {
+        // ... conversion logic ...
+        return sim_main_py(args);
+    });
+}
+
+
 PYBIND11_MODULE(core, m) {
     m.doc() = "Python bindings for LC-3 Tools Simulator";
+
+
     // Bind the Printer interface
     py::class_<PythonPrinter>(m, "Printer")
         .def(py::init<>())

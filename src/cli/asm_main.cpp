@@ -20,7 +20,7 @@ bool endsWith(std::string const & search, std::string const & suffix)
     return std::equal(suffix.rbegin(), suffix.rend(), search.rbegin());
 }
 
-int main(int argc, char *argv[])
+int asm_main(int argc, char *argv[])
 {
     CLIArgs args;
     std::vector<std::pair<std::string, std::string>> parsed_args = parseCLIArgs(argc, argv);
