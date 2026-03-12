@@ -2,6 +2,11 @@ from setuptools import setup, Extension
 import pybind11
 import glob
 import os
+import sys
+
+compile_args = []
+if sys.platform != 'win32':
+    compile_args = ['-Wno-error=format-security', '-Wno-format-security']
 
 # All paths are now relative to the root directory
 sources = [
@@ -23,7 +28,7 @@ ext_modules = [
         sources=sources,
         include_dirs=include_dirs,
         language='c++',
-        extra_compile_args=['-std=c++11', '-Wno-error=format-security', '-Wno-format-security'],
+        extra_compile_args=compile_args,
     ),
 ]
 
