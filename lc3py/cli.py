@@ -159,6 +159,24 @@ def enter_is_terminate(ch):
         return 7  # 7 is the ASCII code for Bell, which textpad treats as 'stop'
     return ch
 
+def move_and_resize(win, new_y, new_x, new_h, new_w):
+    try:
+        # Get current dimensions
+        curr_h, curr_w = win.getmaxyx()
+        
+        # If shrinking, resize before moving
+        if new_h < curr_h or new_w < curr_w:
+            win.resize(new_h, new_w)
+            win.mvwin(new_y, new_x)
+        # If growing, move before resizing
+        else:
+            win.mvwin(new_y, new_x)
+            win.resize(new_h, new_w)
+            
+    except curses.error:
+        # This occurs if the window would be off-screen at any point
+        pass
+
 def hotkey_str(status, win_width):
     strwidth = win_width - 2
     retstr = ""
@@ -185,6 +203,7 @@ def cli_main(stdscr):
     mem_win = curses.newwin(maxy-13, status['col0width'], 13, 0)
     hotkeys_win = curses.newwin(hotkeyheight, maxx-status['col0width'], 0, status['col0width'])
     console_win = curses.newwin(maxy-hotkeyheight, maxx-status['col0width'], hotkeyheight, status['col0width'])
+    curses.use_default_colors()
     stdscr.clear()
     curses.resizeterm(maxy,maxx)
     stdscr.refresh()
