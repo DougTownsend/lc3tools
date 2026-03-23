@@ -124,6 +124,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
     key = 0
     next_screen_update = time.time() + 0.1
     running = False
+    step_trap = False
     while(True):
 
         if sim.read_mem(sim.get_pc()) == 0xf025:
@@ -132,11 +133,22 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
         
         if running:
             sim.step_in()
+            if step_trap:
+                if sim.get_pc() >= 0x3000:
+                    running = False
+                    step_trap = False
+                    status['mode'] = 'break'
         else:
             time.sleep(0.01) #lower CPU usage while stopped
             if not kbd_input.empty():
                 key = kbd_input.get()
                 if key == ord('s'):
+                    with open("debug.txt", "w") as debug:
+                        debug.write(f"{sim.read_mem(sim.get_pc())}")
+                    if sim.read_mem(sim.get_pc()) >> 12 == 0xF:
+                        step_trap = True
+                        running = True
+                        status['mode'] = 'running'
                     sim.step_in()
         
         if time.time() >= next_screen_update:
@@ -159,7 +171,8 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             stdout = sim.read()
             if len(stdout) > 0:
                 console_out.put(stdout)
-            status['pc'] = sim.get_pc()
+            if sim.get_pc() >= 0x3000:
+                status['pc'] = sim.get_pc()
             with locks['reg']:
                 reg_lines [:] = []
                 reg_lines.extend(registers_str(sim))
