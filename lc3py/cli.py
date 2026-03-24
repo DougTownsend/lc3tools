@@ -143,8 +143,6 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             if not kbd_input.empty():
                 key = kbd_input.get()
                 if key == ord('s'):
-                    with open("debug.txt", "w") as debug:
-                        debug.write(f"{sim.read_mem(sim.get_pc())}")
                     if sim.read_mem(sim.get_pc()) >> 12 == 0xF:
                         step_trap = True
                         running = True

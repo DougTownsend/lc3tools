@@ -7,7 +7,7 @@ import sys
 
 compile_args = []
 if sys.platform != 'win32':
-    compile_args = ['-Wno-error=format-security', '-Wno-format-security', '-fvisibility=default']
+    compile_args = ['-Wno-error=format-security', '-Wno-format-security', '-fvisibility=default', '-std=c++11']
 
 sources = [
     "bindings.cpp",
