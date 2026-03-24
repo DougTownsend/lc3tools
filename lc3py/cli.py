@@ -179,10 +179,8 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             stdout = sim.read()
             if len(stdout) > 0:
                 console_out.put(stdout)
-            if sim.get_pc() >= 0x3000:
-                status['pc'] = sim.get_pc()
-            else:
-                status['rti_pc'] = sim.read_mem(0x2ffe)
+            status['pc'] = sim.get_pc()
+            status['rti_pc'] = sim.read_mem(0x2ffe)
             with locks['reg']:
                 reg_lines [:] = []
                 reg_lines.extend(registers_str(sim))
