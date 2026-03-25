@@ -151,11 +151,12 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             if not kbd_input.empty():
                 key = kbd_input.get()
                 if key == ord('s'):
-                    if sim.read_mem(sim.get_pc()) >> 12 == 0xF or sim.get_pc() < 0x3000:
-                        step_trap = True
-                        running = True
-                        status['mode'] = 'running'
-                    sim.step_in()
+                    if sim.read_mem(sim.get_pc()) != 0xf025:
+                        if sim.read_mem(sim.get_pc()) >> 12 == 0xF or sim.get_pc() < 0x3000:
+                            step_trap = True
+                            running = True
+                            status['mode'] = 'running'
+                        sim.step_in()
         
         if time.time() >= next_screen_update:
             #put all interprocess communication in here to not bog down simulator
