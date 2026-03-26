@@ -168,7 +168,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
         if time.time() >= next_screen_update:
             #put all interprocess communication in here to not bog down simulator
             if not status['run']: break
-            next_screen_update += 0.02
+            next_screen_update += 0.05
             local_breakpoints = breakpoints[:]
             if status['mode'] == 'running':
                 running = True
