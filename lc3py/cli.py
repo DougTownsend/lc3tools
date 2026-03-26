@@ -127,6 +127,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
     running = False
     step_trap = False
     break_set = False
+    local_breakpoints = []
     while(True):
 
         if sim.read_mem(sim.get_pc()) == 0xf025:
@@ -134,7 +135,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             running = False
         
         if running:
-            if sim.get_pc() in breakpoints and not break_set:
+            if sim.get_pc() in local_breakpoints and not break_set:
                 break_set = True
                 running = False
                 status['mode'] = 'break'
@@ -162,6 +163,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             #put all interprocess communication in here to not bog down simulator
             if not status['run']: break
             next_screen_update += 0.02
+            local_breakpoints = breakpoints[:]
             if status['mode'] == 'running':
                 running = True
             else:
