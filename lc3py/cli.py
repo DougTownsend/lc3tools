@@ -190,10 +190,10 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
                 sim.set_pc(0x3000)
             status['pc'] = sim.get_pc()
             status['rti_pc'] = sim.read_mem(0x2ffe)
-            reg_lines = registers_str(sim)
+            new_reg_lines = registers_str(sim)
             with locks['reg']:
                 reg_lines [:] = []
-                reg_lines.extend(reg_lines)
+                reg_lines.extend(new_reg_lines)
             new_mem_lines = mem_str(status['mem_maxyx'][0], status['mem_maxyx'][1], sim, breakpoints, status)
             with locks['mem']:
                 mem_lines[:] = []
