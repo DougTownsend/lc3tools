@@ -134,7 +134,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
     local_breakpoints = []
     while(True):
 
-        if sim.read_mem(sim.get_pc()) == 0xf025:
+        if sim.read_mem(sim.get_pc()) == 0xf025 and running:
             status['mode'] = 'break'
             running = False
         
