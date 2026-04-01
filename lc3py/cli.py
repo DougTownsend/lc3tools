@@ -200,8 +200,9 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
                 mem_lines.extend(new_mem_lines)
     return
 
-def input_handler(stdscr, status, kbd_input, breakpoints, locks, kbdwindow):
+def input_handler(stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console):
     while(True):
+        time.sleep(.01)
         key = kbdwindow.getch()
         if key == 27:
             status['mode'] = 'break'
@@ -230,6 +231,8 @@ def input_handler(stdscr, status, kbd_input, breakpoints, locks, kbdwindow):
                 status['restart'] = True
             if key == ord('b'):
                 status['mode'] = 'set_breakpoint'
+            if key == ord('c'):
+                console.clear()
         elif status['mode'] == 'set_breakpoint':
             if key in [10, 13, curses.KEY_ENTER]:
                 with locks['breakpoint']:
@@ -288,8 +291,8 @@ def hotkey_str(status, win_width):
             lockstr = "unlock"
         else:
             lockstr = "lock"
-        retstr = f"s:step-in o:step-over r:run q:quit b:breakpoints h:hsplit-left "
-        retstr += f"l:hsplit-right e:restart reassemble n:{lockstr}-mem-screen k:mem-scroll-up j:mem-scroll-down" 
+        retstr = f"s:step-in r:run q:quit b:breakpoints h:hsplit-left "
+        retstr += f"l:hsplit-right e:restart c:clear-console n:{lockstr}-mem-screen k:mem-scroll-up j:mem-scroll-down" 
     elif status['mode'] == 'set_breakpoint':
         retstr = f"Enter address to toggle breakpoint: {status['breakpoint']}"
     strwidth = max(5, strwidth)
@@ -348,7 +351,7 @@ def cli_main(stdscr):
     locks['console'] = mgr.Lock()
     locks['breakpoint'] = mgr.Lock()
 
-    input_thread = threading.Thread(target=input_handler, args=[stdscr, status, kbd_input, breakpoints, locks, kbdwindow], daemon=True)
+    input_thread = threading.Thread(target=input_handler, args=[stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console_deque], daemon=True)
     input_thread.start()
 
 
