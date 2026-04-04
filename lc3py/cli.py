@@ -8,12 +8,11 @@ import multiprocessing
 import time
 import textwrap
 import collections
-
-profile = False
-
-if profile:
-    import cProfile, pstats, io
-    from pstats import SortKey
+import os
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = 'hide'
+import pygame
+import numpy as np
+import io
 
 #from .core import sim_backend
 
@@ -123,7 +122,28 @@ def mem_str(maxy, maxx, sim, breakpoints, status):
         lines.append(line)
     return lines
 
-def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, locks):
+def display_proc(shm_name, key):
+    shm = multiprocessing.shared_memory.SharedMemory(name=shm_name)
+    image_data = np.ndarray((128,124,3), dtype=np.uint8, buffer=shm.buf)
+    pygame.init()
+    screen = pygame.display.set_mode((256, 248))
+    while True:
+        time.sleep(.01)
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                break
+            
+            if event.type == pygame.KEYDOWN and event.unicode:
+                # Send the key name or unicode to the curses process
+                key.value = ord(event.unicode)
+        surface = pygame.surfarray.make_surface(image_data.swapaxes(0, 1))
+        scaled = pygame.transform.scale(surface, (256, 248))
+        screen.blit(scaled, (0, 0))
+        pygame.display.flip()
+
+
+
+def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, locks, disp_key):
     sim = lc3py.Simulator()
     load_args(sim)
     key = 0
@@ -132,6 +152,9 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
     step_trap = False
     break_set = False
     local_breakpoints = []
+    shm = multiprocessing.shared_memory.SharedMemory(create=True, size=128*124*3)
+    image_data = np.ndarray((128, 124, 3), dtype=np.uint8, buffer=shm.buf)
+    p = False
     while(True):
 
         if sim.read_mem(sim.get_pc()) == 0xf025 and running:
@@ -165,7 +188,9 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
         
         if time.time() >= next_screen_update:
             #put all interprocess communication in here to not bog down simulator
-            if not status['run']: break
+            if not status['run']: 
+                p.kill()
+                break
             next_screen_update += 0.05
             local_breakpoints = breakpoints[:]
             if status['mode'] == 'running':
@@ -204,83 +229,112 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
             with locks['mem']:
                 mem_lines[:] = []
                 mem_lines.extend(new_mem_lines)
+            if status['display']:
+                if not p:
+                    p = multiprocessing.Process(target=display_proc, args=[shm.name, disp_key])
+                    p.start()
+                for addr in range(0xc000, 0xfe00):
+                    y = (addr - 0xc000) // 128
+                    x = (addr - 0xc000) % 128
+                    data = sim.read_mem(addr)
+                    b = data & 0x1f
+                    b = b << 3
+                    data = data >> 5
+                    g = data & 0x1f
+                    g = g << 3
+                    data = data >> 5
+                    r = data & 0x1f
+                    r = r << 3
+                    image_data[x][y][0] = r
+                    image_data[x][y][1] = g
+                    image_data[x][y][2] = b
+            else:
+                if p:
+                    p.kill()
+                    p = False
+
     return
 
-def input_handler(stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console):
+def input_handler(stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console, disp_key):
     while(True):
         time.sleep(.01)
         key = kbdwindow.getch()
+        if disp_key.value > 0:
+            key = disp_key.value
+            disp_key.value = -1
         if key == 27:
             status['mode'] = 'break'
-    
-        if status['mode'] == 'break':
-            if key == ord('q') and status['mode'] == 'break':
-                status['run'] = False
-                break
-            if key == ord('r'):
-                status['mode'] = 'running'
-            if key == ord('h'):
-                status['col0width'] = max(39,status['col0width'] - 1)
-            if key == ord('l'):
-                status['col0width'] = min(status['col0width'] + 1, status['maxx'])
-            if key == ord('s'):
-                kbd_input.put(key)
-            if key == ord('n'):
-                status['mem_locked'] = not status['mem_locked']
-            if key == ord('k'):
-                status['mem_locked'] = True
-                if status['baseaddr'] > 0:
-                    status['baseaddr'] -= 1
-            if key == ord('j'):
-                status['mem_locked'] = True
-                status['baseaddr'] += 1
-            if key == ord('e'):
-                status['restart'] = True
-            if key == ord('a'):
-                status['reassemble'] = True
-                status['restart'] = True
-            if key == ord('b'):
-                status['mode'] = 'set_breakpoint'
-            if key == ord('c'):
-                console.clear()
-            if key == ord('g'):
-                status['mode'] = "set_baseaddr"
-                status["new_baseaddr"] = ""
-        elif status['mode'] == 'set_breakpoint':
-            if key in [10, 13, curses.KEY_ENTER]:
-                with locks['breakpoint']:
+        if key > 0: 
+            if status['mode'] == 'break':
+                if key == ord('q') and status['mode'] == 'break':
+                    status['run'] = False
+                    break
+                if key == ord('r'):
+                    status['mode'] = 'running'
+                if key == ord('h'):
+                    status['col0width'] = max(39,status['col0width'] - 1)
+                if key == ord('l'):
+                    status['col0width'] = min(status['col0width'] + 1, status['maxx'])
+                if key == ord('s'):
+                    kbd_input.put(key)
+                if key == ord('n'):
+                    status['mem_locked'] = not status['mem_locked']
+                if key == ord('k'):
+                    status['mem_locked'] = True
+                    if status['baseaddr'] > 0:
+                        status['baseaddr'] -= 1
+                if key == ord('j'):
+                    status['mem_locked'] = True
+                    status['baseaddr'] += 1
+                if key == ord('e'):
+                    status['restart'] = True
+                if key == ord('a'):
+                    status['reassemble'] = True
+                    status['restart'] = True
+                if key == ord('b'):
+                    status['mode'] = 'set_breakpoint'
+                if key == ord('c'):
+                    console.clear()
+                if key == ord('g'):
+                    status['mode'] = "set_baseaddr"
+                    status["new_baseaddr"] = ""
+                if key == ord('d'):
+                    status['display'] = not status['display']
+            elif status['mode'] == 'set_breakpoint':
+                if key in [10, 13, curses.KEY_ENTER]:
+                    with locks['breakpoint']:
+                        try:
+                            bp = int(status['breakpoint'], 16)
+                            if bp in breakpoints:
+                                breakpoints.remove(bp)
+                            else:
+                                breakpoints.append(bp)
+                        except:
+                            pass
+                    status['breakpoint'] = ""
+                    status['mode'] = 'break'
+                if curses.ascii.isascii(key) and key != curses.KEY_BACKSPACE and key != curses.ascii.DEL:
+                    status['breakpoint'] += chr(key)
+                elif key == curses.KEY_BACKSPACE or key == curses.ascii.DEL:
+                    if len(status['breakpoint']) > 0:
+                        status['breakpoint'] = status['breakpoint'][:-1]
+            elif status['mode'] == 'set_baseaddr':
+                if key in [10, 13, curses.KEY_ENTER]:
                     try:
-                        bp = int(status['breakpoint'], 16)
-                        if bp in breakpoints:
-                            breakpoints.remove(bp)
-                        else:
-                            breakpoints.append(bp)
+                        status['baseaddr'] = int(status["new_baseaddr"], 16)
+                        status['mem_locked'] = True
                     except:
                         pass
-                status['breakpoint'] = ""
-                status['mode'] = 'break'
-            if curses.ascii.isascii(key) and key != curses.KEY_BACKSPACE and key != curses.ascii.DEL:
-                status['breakpoint'] += chr(key)
-            elif key == curses.KEY_BACKSPACE or key == curses.ascii.DEL:
-                if len(status['breakpoint']) > 0:
-                    status['breakpoint'] = status['breakpoint'][:-1]
-        elif status['mode'] == 'set_baseaddr':
-            if key in [10, 13, curses.KEY_ENTER]:
-                try:
-                    status['baseaddr'] = int(status["new_baseaddr"], 16)
-                    status['mem_locked'] = True
-                except:
-                    pass
-                status["new_baseaddr"] = ""
-                status['mode'] = 'break'
-            if curses.ascii.isascii(key) and key != curses.KEY_BACKSPACE and key != curses.ascii.DEL:
-                status["new_baseaddr"] += chr(key)
-            elif key == curses.KEY_BACKSPACE or key == curses.ascii.DEL:
-                if len(status['new_baseaddr']) > 0:
-                    status["new_baseaddr"] = status["new_baseaddr"][:-1]
-                    
-        else:
-            kbd_input.put(key)
+                    status["new_baseaddr"] = ""
+                    status['mode'] = 'break'
+                if curses.ascii.isascii(key) and key != curses.KEY_BACKSPACE and key != curses.ascii.DEL:
+                    status["new_baseaddr"] += chr(key)
+                elif key == curses.KEY_BACKSPACE or key == curses.ascii.DEL:
+                    if len(status['new_baseaddr']) > 0:
+                        status["new_baseaddr"] = status["new_baseaddr"][:-1]
+                        
+            else:
+                kbd_input.put(key)
 
 
 
@@ -321,6 +375,7 @@ def hotkey_str(status, win_width):
             lockstr = "lock"
         retstr = f"s:step-in r:run q:quit b:breakpoints g:goto-address a:reassemble h:hsplit-left "
         retstr += f"l:hsplit-right e:restart c:clear-console n:{lockstr}-mem-screen k:mem-scroll-up j:mem-scroll-down" 
+        retstr += " d:toggle-display"
     elif status['mode'] == 'set_breakpoint':
         retstr = f"Enter address to toggle breakpoint: " + status['breakpoint']
     elif status['mode'] == 'set_baseaddr':
@@ -342,6 +397,7 @@ def cli_main(stdscr):
     status['reassemble'] = False
     status['breakpoint'] = ""
     status['new_baseaddr'] = ""
+    status['display'] = False
     breakpoints = []
     #sim = lc3py.Simulator()
     curses.curs_set(0) # Hide cursor
@@ -359,6 +415,7 @@ def cli_main(stdscr):
     hotkeys_win = curses.newwin(hotkeyheight, maxx-status['col0width'], 0, status['col0width'])
     console_win = curses.newwin(maxy-hotkeyheight, maxx-status['col0width'], hotkeyheight, status['col0width'])
     kbdwindow = curses.newwin(0,0,0,0)
+    kbdwindow.nodelay(True)
     curses.use_default_colors()
     try:
         curses.set_escdelay(25)
@@ -383,13 +440,14 @@ def cli_main(stdscr):
     locks['console'] = mgr.Lock()
     locks['breakpoint'] = mgr.Lock()
 
-    input_thread = threading.Thread(target=input_handler, args=[stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console_deque], daemon=True)
+    disp_key = mgr.Value('i', -1)
+
+    input_thread = threading.Thread(target=input_handler, args=[stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console_deque, disp_key], daemon=True)
     input_thread.start()
 
 
-    sim = multiprocessing.Process(target=sim_proc, args=[reg_lines, mem_lines, breakpoints, console_q, kbd_input, status, locks])
+    sim = multiprocessing.Process(target=sim_proc, args=[reg_lines, mem_lines, breakpoints, console_q, kbd_input, status, locks, disp_key])
     sim.start()
-
     while True:
         #Update size and location of windows
         new_maxy, new_maxx = stdscr.getmaxyx()
@@ -510,16 +568,4 @@ def cli_main(stdscr):
     sim.join()
             
 def lc3pysim():
-    pr = None
-    if profile:
-        pr = cProfile.Profile()
-        pr.enable()
     curses.wrapper(cli_main)
-    if profile:
-        pr.disable()
-        s = io.StringIO()
-        sortby = SortKey.CUMULATIVE
-        ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-        ps.print_stats()
-        with open("profile.txt", "w") as f:
-            f.write(s.getvalue())
