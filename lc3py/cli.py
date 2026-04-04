@@ -12,7 +12,7 @@ import os
 os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = 'hide'
 import pygame
 import numpy as np
-import io
+import ctypes
 
 #from .core import sim_backend
 
@@ -122,13 +122,13 @@ def mem_str(maxy, maxx, sim, breakpoints, status):
         lines.append(line)
     return lines
 
-def display_proc(shm_name, key):
+def display_proc(shm_name, key, run):
     shm = multiprocessing.shared_memory.SharedMemory(name=shm_name)
     image_data = np.ndarray((128,124,3), dtype=np.uint8, buffer=shm.buf)
     pygame.init()
     pygame.display.set_caption("LC3 Display")
     screen = pygame.display.set_mode((256, 248))
-    while True:
+    while run.value:
         time.sleep(.01)
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -141,6 +141,7 @@ def display_proc(shm_name, key):
         scaled = pygame.transform.scale(surface, (256, 248))
         screen.blit(scaled, (0, 0))
         pygame.display.flip()
+    shm.close()
 
 
 
@@ -155,6 +156,8 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
     local_breakpoints = []
     shm = multiprocessing.shared_memory.SharedMemory(create=True, size=128*124*3)
     image_data = np.ndarray((128, 124, 3), dtype=np.uint8, buffer=shm.buf)
+    mgr = multiprocessing.Manager()
+    disp_run = mgr.Value(ctypes.c_bool, False)
     p = False
     while(True):
 
@@ -189,8 +192,7 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
         
         if time.time() >= next_screen_update:
             #put all interprocess communication in here to not bog down simulator
-            if not status['run']: 
-                p.kill()
+            if not status['run']:
                 break
             next_screen_update += 0.05
             local_breakpoints = breakpoints[:]
@@ -232,7 +234,8 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
                 mem_lines.extend(new_mem_lines)
             if status['display']:
                 if not p:
-                    p = multiprocessing.Process(target=display_proc, args=[shm.name, disp_key])
+                    p = multiprocessing.Process(target=display_proc, args=[shm.name, disp_key, disp_run])
+                    disp_run.value = True
                     p.start()
                 for addr in range(0xc000, 0xfe00):
                     y = (addr - 0xc000) // 128
@@ -254,6 +257,9 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
                     p.kill()
                     p = False
 
+    disp_run.value = False 
+    shm.close()
+    shm.unlink()
     return
 
 def input_handler(stdscr, status, kbd_input, breakpoints, locks, kbdwindow, console, disp_key):
@@ -564,7 +570,6 @@ def cli_main(stdscr):
         curses.doupdate()
 
         time.sleep(0.05)
-
     input_thread.join()
     sim.join()
             
