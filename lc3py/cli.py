@@ -126,6 +126,7 @@ def display_proc(shm_name, key):
     shm = multiprocessing.shared_memory.SharedMemory(name=shm_name)
     image_data = np.ndarray((128,124,3), dtype=np.uint8, buffer=shm.buf)
     pygame.init()
+    pygame.display.set_caption("LC3 Display")
     screen = pygame.display.set_mode((256, 248))
     while True:
         time.sleep(.01)
