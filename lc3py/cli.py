@@ -211,7 +211,8 @@ def sim_proc(reg_lines, mem_lines, breakpoints, console_out, kbd_input, status, 
                         status['mode'] = 'running'
             if status['reassemble']:
                 status['reassemble'] = False
-                sim.assemble(sys.argv[1][:-4] + ".asm")
+                for f in sys.argv[1:]:
+                    sim.assemble(f[:-4] + ".asm")
             stdout = sim.read()
             if len(stdout) > 0:
                 with locks['console']:
