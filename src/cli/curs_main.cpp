@@ -737,6 +737,7 @@ static void ncursesThread(
 ) {
     using namespace std::chrono_literals;
 
+#ifndef _WIN32
     // Ensure ncurses can find the terminfo database regardless of how
     // the library was compiled or where the binary is run from.
     if (!getenv("TERMINFO")) {
@@ -749,6 +750,7 @@ static void ncursesThread(
         }
     }
     if (!getenv("TERM")) setenv("TERM", "xterm", 0);
+#endif
 
     if (!initscr()) {
         fprintf(stderr, "Failed to initialize terminal. Try: export TERM=xterm\n");
