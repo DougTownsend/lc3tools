@@ -80,8 +80,20 @@ jobs:
       - name: Install PDCurses via vcpkg
         run: vcpkg install pdcurses:x64-windows
 
+      - name: Debug Qt environment
+        run: |
+          echo "Qt5_DIR=$env:Qt5_DIR"
+          echo "Qt6_DIR=$env:Qt6_DIR"
+          echo "QT_ROOT_DIR=$env:QT_ROOT_DIR"
+          echo "VCPKG_INSTALLATION_ROOT=$env:VCPKG_INSTALLATION_ROOT"
+          if (Test-Path "$env:Qt5_DIR") { echo "Qt5_DIR exists" } else { echo "Qt5_DIR NOT FOUND" }
+          python -c "import os; qt=os.environ.get('QT_ROOT_DIR',''); qt5=os.environ.get('Qt5_DIR',''); print(f'QT_ROOT_DIR={qt}'); print(f'Qt5_DIR={qt5}')"
+
       - name: Build and install lc3py
-        run: pip install .
+        run: pip install . -v
+
+      - name: Verify curs_main is available
+        run: python -c "from lc3py.cli_bindings import curs_main; print('curs_main OK')"
 
       - name: Freeze executables with PyInstaller
         run: |
@@ -140,6 +152,11 @@ jobs:
           fetch-depth: 0
         continue-on-error: true
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
       - name: Create gh-pages branch if needed
         run: |
           if ! git rev-parse --verify gh-pages 2>/dev/null; then
@@ -179,8 +196,6 @@ jobs:
 
       - name: Deploy to GitHub Pages
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
           git add simple/
           git diff --cached --quiet && echo "No changes" && exit 0
           git commit -m "Update package index for ${{ github.ref_name }}"
