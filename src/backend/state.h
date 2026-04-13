@@ -64,6 +64,11 @@ namespace core
 
         void registerDeviceReg(uint16_t mem_addr, PIDevice device);
 
+        // Fast bulk read for non-MMIO ranges (e.g. display memory).
+        // Returns a pointer to the raw MemLocation array starting at addr.
+        // Caller is responsible for staying within non-MMIO address space.
+        MemLocation const * rawMemPtr(uint16_t addr) const { return mem.data() + addr; }
+
         void enqueueInterrupt(InterruptType type) { pending_interrupts.push(type); }
         InterruptType peekInterrupt(void) const;
         InterruptType dequeueInterrupt(void);

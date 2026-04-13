@@ -580,4 +580,5 @@ def cli_main(stdscr):
     sim.join()
             
 def lc3pysim():
-    curses.wrapper(cli_main)
+    from .cli_bindings import curs_main
+    sys.exit(curs_main(sys.argv, sys.executable))
