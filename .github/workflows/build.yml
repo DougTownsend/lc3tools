@@ -86,8 +86,8 @@ jobs:
           pyinstaller --onefile --console --name lc3sim --distpath dist\lc3sim installer\lc3sim_main.py
           pyinstaller --onefile --console --name lc3pysim --distpath dist\lc3pysim installer\lc3pysim_main.py
 
-      - name: Install WiX v5
-        run: dotnet tool install --global wix
+      - name: Install WiX v4
+        run: dotnet tool install --global wix --version 4.0.6
 
       - name: Build MSI
         run: wix build -o lc3tools.msi installer\lc3tools.wxs
