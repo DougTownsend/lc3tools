@@ -92,8 +92,12 @@ jobs:
       - name: Build and install lc3py
         run: pip install . -v
 
-      - name: Verify curs_main is available
-        run: python -c "from lc3py.cli_bindings import curs_main; print('curs_main OK')"
+      - name: Verify installation
+        run: |
+          pip show -f lc3py
+          python -c "import site, os; [print(f'{p}: {os.listdir(os.path.join(p, \"lc3py\"))}') for p in site.getsitepackages() if os.path.isdir(os.path.join(p, 'lc3py'))]"
+          python -c "import lc3py; print('lc3py OK:', lc3py.__file__)"
+          python -c "from lc3py.cli_bindings import curs_main; print('curs_main OK')"
 
       - name: Freeze executables with PyInstaller
         run: |
