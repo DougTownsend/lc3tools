@@ -75,7 +75,7 @@ public:
     // Added missing methods:
     void beginInput(void) override {}
     void endInput(void) override {}
-    bool hasRemaining(void) const override { return buffer.length() > 0; }
+    bool hasRemaining(void) const override { return false; }
 };
 
 PYBIND11_MODULE(cli_bindings, m) {
