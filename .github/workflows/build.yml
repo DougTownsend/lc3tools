@@ -69,10 +69,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Qt6
+      - name: Install Qt5
         uses: jurplel/install-qt-action@v4
         with:
-          version: "6.8.*"
+          version: "5.15.2"
+          arch: win64_msvc2019_64
+          cache: false
+          set-env: true
 
       - name: Install PDCurses via vcpkg
         run: vcpkg install pdcurses:x64-windows
