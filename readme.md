@@ -9,7 +9,7 @@ Make sure Python is installed
 ([python.org/downloads](https://www.python.org/downloads/)), then run:
 
 ```
-pip3 install lc3py --extra-index-url https://DougTownsend.github.io/lc3tools/simple/
+pip3 install lc3sim --extra-index-url https://DougTownsend.github.io/lc3tools/simple/
 ```
 
 pip automatically picks the right file for your OS and Python version.

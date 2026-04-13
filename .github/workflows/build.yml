@@ -187,7 +187,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
         run: |
-          mkdir -p simple/lc3py
+          mkdir -p simple/lc3sim
 
           WHEELS=$(gh release list --repo "$REPO" --limit 100 --json tagName -q '.[].tagName' | while read tag; do
             gh release view "$tag" --repo "$REPO" --json assets -q '.assets[].name' 2>/dev/null | grep '\.whl$' || true
@@ -203,11 +203,11 @@ jobs:
               echo "<a href=\"${URL}\">${whl}</a><br>"
             done
             echo '</body></html>'
-          } > simple/lc3py/index.html
+          } > simple/lc3sim/index.html
 
           {
             echo '<!DOCTYPE html><html><body>'
-            echo '<a href="lc3py/">lc3py</a>'
+            echo '<a href="lc3sim/">lc3py</a>'
             echo '</body></html>'
           } > simple/index.html
 

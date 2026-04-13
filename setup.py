@@ -137,7 +137,7 @@ ext_modules = [
 ]
 
 setup(
-    name="lc3py",
+    name="lc3sim",
     version="0.1.0",
     packages=["lc3py"],
     ext_modules=ext_modules,
