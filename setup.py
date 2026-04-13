@@ -75,8 +75,8 @@ if sys.platform == 'win32':
         cli_ext_sources = cli_sources  # include curs_main.cpp
         cli_compile_args.append("-DHAS_CURS_MAIN")
 
-        # Detect Qt version from directory contents
-        qt_ver = 6 if os.path.isdir(os.path.join(qt_root, 'include', 'QtCore')) else 5
+        # Detect Qt version: check which env var led us here
+        qt_ver = 6 if os.environ.get('Qt6_DIR', '') else 5
 
         # Qt headers
         qt_inc = os.path.join(qt_root, 'include')
