@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-13, macos-14]
+        os: [ubuntu-22.04, macos-14, macos-15]
 
     steps:
       - uses: actions/checkout@v4
@@ -65,14 +65,26 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install Qt5
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "5.15.2"
+          arch: win64_msvc2019_64
+
+      - name: Install PDCurses via vcpkg
+        run: vcpkg install pdcurses:x64-windows
+
       - name: Build and install lc3py
         run: pip install .
+        env:
+          Qt5_DIR: ${{ env.Qt5_DIR }}
 
       - name: Freeze executables with PyInstaller
         run: |
           pip install pyinstaller
           pyinstaller --onefile --console --name lc3asm --distpath dist\lc3asm installer\lc3asm_main.py
           pyinstaller --onefile --console --name lc3sim --distpath dist\lc3sim installer\lc3sim_main.py
+          pyinstaller --onefile --console --name lc3pysim --distpath dist\lc3pysim installer\lc3pysim_main.py
 
       - name: Install WiX v5
         run: dotnet tool install --global wix
