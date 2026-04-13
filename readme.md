@@ -17,7 +17,7 @@ pip automatically picks the right file for your OS and Python version.
 To update later, run the same command with `--upgrade`:
 
 ```
-pip3 install --upgrade lc3py --extra-index-url https://DougTownsend.github.io/lc3tools/simple/
+pip3 install --upgrade lc3sim --extra-index-url https://DougTownsend.github.io/lc3tools/simple/
 ```
 
 You should now be able to use `lc3asm`, `lc3sim`, and `lc3pysim` in your
