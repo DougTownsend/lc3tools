@@ -1,4 +1,11 @@
-// Qt headers must come before ncurses.h because ncurses defines
+// On Windows, PDCurses's <curses.h> pulls in <windows.h> which defines
+// min/max macros that break Qt and the STL.  These must come first.
+#ifdef _WIN32
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#endif
+
+// Qt headers must come before curses.h because curses defines
 // 'timeout' as a macro that breaks QTimer::timeout signal.
 #include <QApplication>
 #include <QWidget>
