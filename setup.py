@@ -56,25 +56,35 @@ cli_ext_sources  = cli_sources  # all cli/*.cpp including curs_main
 
 if sys.platform == 'win32':
     # Windows: enable curs_main when Qt + PDCurses are available.
-    # CI sets Qt5_DIR or Qt6_DIR via install-qt-action;
+    # CI sets QT_ROOT_DIR (or Qt6_DIR / Qt5_DIR) via install-qt-action;
     # PDCurses comes from vcpkg (VCPKG_INSTALLATION_ROOT).
-    qt_dir = os.environ.get('Qt6_DIR', os.environ.get('Qt5_DIR', ''))
-    vcpkg  = os.environ.get('VCPKG_INSTALLATION_ROOT', '')
+    #
+    # install-qt-action sets Qt6_DIR to .../lib/cmake/Qt6 (cmake config),
+    # but we need the root (which has include/ and lib/).  QT_ROOT_DIR
+    # points there directly; otherwise walk up from the cmake path.
+    qt_root = os.environ.get('QT_ROOT_DIR', '')
+    if not qt_root:
+        cmake_dir = os.environ.get('Qt6_DIR', os.environ.get('Qt5_DIR', ''))
+        if cmake_dir and os.path.isdir(cmake_dir):
+            # .../lib/cmake/Qt6 → go up 3 levels to the root
+            qt_root = os.path.dirname(os.path.dirname(os.path.dirname(cmake_dir)))
 
-    if qt_dir and os.path.isdir(qt_dir):
+    vcpkg = os.environ.get('VCPKG_INSTALLATION_ROOT', '')
+
+    if qt_root and os.path.isdir(os.path.join(qt_root, 'include')):
         cli_ext_sources = cli_sources  # include curs_main.cpp
         cli_compile_args.append("-DHAS_CURS_MAIN")
 
-        # Detect Qt version from directory name
-        qt_ver = 6 if 'Qt6' in os.environ.get('Qt6_DIR', '') or '6.' in qt_dir else 5
+        # Detect Qt version from directory contents
+        qt_ver = 6 if os.path.isdir(os.path.join(qt_root, 'include', 'QtCore')) else 5
 
         # Qt headers
-        qt_inc = os.path.join(qt_dir, 'include')
+        qt_inc = os.path.join(qt_root, 'include')
         for sub in ['', 'QtCore', 'QtGui', 'QtWidgets']:
             d = os.path.join(qt_inc, sub) if sub else qt_inc
             if os.path.isdir(d):
                 cli_include_dirs.append(d)
-        cli_lib_dirs.append(os.path.join(qt_dir, 'lib'))
+        cli_lib_dirs.append(os.path.join(qt_root, 'lib'))
         pfx = 'Qt6' if qt_ver == 6 else 'Qt5'
         cli_libraries.extend([pfx + 'Core', pfx + 'Gui', pfx + 'Widgets'])
 
