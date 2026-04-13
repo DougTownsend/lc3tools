@@ -50,8 +50,21 @@ jobs:
           # Inject Qt platform plugins into the wheel before repair.
           # auditwheel/delocate bundle linked .so/.dylib files but not
           # Qt plugins (which are loaded by path at runtime).
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "bash {package}/installer/repair_wheel_linux.sh {wheel} {dest_dir}"
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "bash {package}/installer/repair_wheel_macos.sh {wheel} {dest_dir} {delocate_archs}"
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >-
+            mkdir -p /tmp/_qtp/lc3py/qt_plugins/platforms &&
+            cp /usr/lib64/qt5/plugins/platforms/libqxcb.so /tmp/_qtp/lc3py/qt_plugins/platforms/ &&
+            cd /tmp/_qtp && zip {wheel} lc3py/qt_plugins/platforms/libqxcb.so && cd / &&
+            auditwheel repair -w {dest_dir} {wheel}
+
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >-
+            QT_PREFIX=$(brew --prefix qt) &&
+            PLUGIN=$(find "$QT_PREFIX" -name libqcocoa.dylib -path '*/platforms/*' 2>/dev/null | head -1) &&
+            if [ -n "$PLUGIN" ]; then
+            mkdir -p /tmp/_qtp/lc3py/qt_plugins/platforms &&
+            cp "$PLUGIN" /tmp/_qtp/lc3py/qt_plugins/platforms/ &&
+            cd /tmp/_qtp && zip {wheel} lc3py/qt_plugins/platforms/libqcocoa.dylib && cd /;
+            fi &&
+            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}
 
       - uses: actions/upload-artifact@v4
         with:
