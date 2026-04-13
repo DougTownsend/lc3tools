@@ -95,9 +95,8 @@ jobs:
       - name: Verify installation
         working-directory: ${{ runner.temp }}
         run: |
-          $env:PATH = "$env:QT_ROOT_DIR\bin;$env:VCPKG_INSTALLATION_ROOT\installed\x64-windows\bin;$env:PATH"
           python -c "import lc3py; print('lc3py OK:', lc3py.__file__)"
-          python -c "from lc3py.cli_bindings import curs_main; print('curs_main OK')"
+          python -c "import os; os.add_dll_directory(os.environ['QT_ROOT_DIR']+'\\bin'); os.add_dll_directory(os.environ['VCPKG_INSTALLATION_ROOT']+'\\installed\\x64-windows\\bin'); from lc3py.cli_bindings import curs_main; print('curs_main OK')"
 
       - name: Freeze executables with PyInstaller
         working-directory: ${{ runner.temp }}
