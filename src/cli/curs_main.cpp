@@ -9,7 +9,11 @@
 #include <QKeyEvent>
 #include <QCoreApplication>
 
+#ifdef _WIN32
+#include <curses.h>       // PDCurses
+#else
 #include <ncurses.h>
+#endif
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -610,7 +614,9 @@ static void ncursesThread(
     noecho();
     keypad(stdscr, TRUE);
     curs_set(0);
+#ifndef _WIN32
     use_default_colors();
+#endif
 #ifdef NCURSES_VERSION
     set_escdelay(25);
 #endif
@@ -697,7 +703,7 @@ static void ncursesThread(
         getmaxyx(stdscr, maxy, maxx);
         maxy = std::max(maxy, 20);
         maxx = std::max(maxx, 80);
-        resizeterm(maxy, maxx);
+        resize_term(maxy, maxx);
 
         // Recompute hotkey height for the new terminal width.
         std::string hk = hotkeyStr(mode, mem_locked, bp_input, addr_input,

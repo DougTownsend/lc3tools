@@ -25,7 +25,7 @@ terminal.
 
 > **Windows users:** Download and run `lc3tools.msi` from the
 > [latest release](https://github.com/DougTownsend/lc3tools/releases/latest)
-> instead. The installer adds `lc3asm` and `lc3sim` to your PATH
+> instead. The installer adds `lc3asm`, `lc3sim`, and `lc3pysim` to your PATH
 > automatically. You may need to close and reopen PowerShell after installing.
 > If you need to build from source, see the [Windows](#windows) section below.
 
