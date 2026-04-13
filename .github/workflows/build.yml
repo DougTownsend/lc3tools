@@ -31,22 +31,17 @@ jobs:
           CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-* cp313-*"
           CIBW_SKIP: "*-musllinux*"
 
-          CIBW_BEFORE_ALL_LINUX: >
-            dnf install -y qt5-qtbase-devel ncurses-devel pkgconf-pkg-config
+          CIBW_BEFORE_ALL_LINUX: "yum install -y qt5-qtbase-devel ncurses-devel pkgconfig"
 
-          CIBW_BEFORE_ALL_MACOS: >
-            brew install qt@5 pkg-config
+          CIBW_BEFORE_ALL_MACOS: "brew install qt pkg-config"
 
-          CIBW_ENVIRONMENT_MACOS: >
-            PKG_CONFIG_PATH="$(brew --prefix qt@5)/lib/pkgconfig"
+          CIBW_ENVIRONMENT_MACOS: "PKG_CONFIG_PATH=$(brew --prefix qt)/lib/pkgconfig"
 
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
 
-          CIBW_REPAIR_WHEEL_COMMAND_LINUX: >
-            auditwheel repair -w {dest_dir} {wheel}
-          CIBW_REPAIR_WHEEL_COMMAND_MACOS: >
-            delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}
+          CIBW_REPAIR_WHEEL_COMMAND_LINUX: "auditwheel repair -w {dest_dir} {wheel}"
+          CIBW_REPAIR_WHEEL_COMMAND_MACOS: "delocate-wheel --require-archs {delocate_archs} -w {dest_dir} {wheel}"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -65,19 +60,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install Qt5
+      - name: Install Qt6
         uses: jurplel/install-qt-action@v4
         with:
-          version: "5.15.2"
-          arch: win64_msvc2019_64
+          version: "6.7.3"
+          arch: win64_msvc2022_64
 
       - name: Install PDCurses via vcpkg
         run: vcpkg install pdcurses:x64-windows
 
       - name: Build and install lc3py
         run: pip install .
-        env:
-          Qt5_DIR: ${{ env.Qt5_DIR }}
 
       - name: Freeze executables with PyInstaller
         run: |

@@ -55,23 +55,28 @@ cli_link_args    = []
 cli_ext_sources  = cli_sources  # all cli/*.cpp including curs_main
 
 if sys.platform == 'win32':
-    # Windows: enable curs_main when Qt5 + PDCurses are available (CI sets
-    # Qt5_DIR; PDCurses comes from vcpkg via VCPKG_INSTALLATION_ROOT).
-    qt5_dir = os.environ.get('Qt5_DIR', '')
-    vcpkg   = os.environ.get('VCPKG_INSTALLATION_ROOT', '')
+    # Windows: enable curs_main when Qt + PDCurses are available.
+    # CI sets Qt5_DIR or Qt6_DIR via install-qt-action;
+    # PDCurses comes from vcpkg (VCPKG_INSTALLATION_ROOT).
+    qt_dir = os.environ.get('Qt6_DIR', os.environ.get('Qt5_DIR', ''))
+    vcpkg  = os.environ.get('VCPKG_INSTALLATION_ROOT', '')
 
-    if qt5_dir and os.path.isdir(qt5_dir):
+    if qt_dir and os.path.isdir(qt_dir):
         cli_ext_sources = cli_sources  # include curs_main.cpp
         cli_compile_args.append("-DHAS_CURS_MAIN")
 
-        # Qt5 headers
-        qt_inc = os.path.join(qt5_dir, 'include')
+        # Detect Qt version from directory name
+        qt_ver = 6 if 'Qt6' in os.environ.get('Qt6_DIR', '') or '6.' in qt_dir else 5
+
+        # Qt headers
+        qt_inc = os.path.join(qt_dir, 'include')
         for sub in ['', 'QtCore', 'QtGui', 'QtWidgets']:
             d = os.path.join(qt_inc, sub) if sub else qt_inc
             if os.path.isdir(d):
                 cli_include_dirs.append(d)
-        cli_lib_dirs.append(os.path.join(qt5_dir, 'lib'))
-        cli_libraries.extend(['Qt5Core', 'Qt5Gui', 'Qt5Widgets'])
+        cli_lib_dirs.append(os.path.join(qt_dir, 'lib'))
+        pfx = 'Qt6' if qt_ver == 6 else 'Qt5'
+        cli_libraries.extend([pfx + 'Core', pfx + 'Gui', pfx + 'Widgets'])
 
         # PDCurses via vcpkg
         if vcpkg:
@@ -82,20 +87,23 @@ if sys.platform == 'win32':
                 os.path.join(vcpkg, 'installed', triplet, 'lib'))
         cli_libraries.append('pdcurses')
     else:
-        # No Qt5 available — exclude curs_main.cpp
+        # No Qt available — exclude curs_main.cpp
         cli_ext_sources = core_cli_sources
 else:
-    # Unix: enable curs_main with ncurses + Qt5
+    # Unix: enable curs_main with ncurses + Qt (try Qt6, fall back to Qt5)
     cli_compile_args.append("-DHAS_CURS_MAIN")
     cli_libraries.append("ncurses")
 
-    qt5_cflags = _pkgconfig("--cflags", "Qt5Widgets")
-    qt5_libs   = _pkgconfig("--libs",   "Qt5Widgets")
-    cli_include_dirs += [f[2:] for f in qt5_cflags if f.startswith("-I")]
-    cli_compile_args += [f for f in qt5_cflags if not f.startswith("-I")]
-    cli_lib_dirs     += [f[2:] for f in qt5_libs if f.startswith("-L")]
-    cli_libraries    += [f[2:] for f in qt5_libs if f.startswith("-l")]
-    cli_link_args    += [f for f in qt5_libs if not f.startswith(("-L", "-l"))]
+    qt_cflags = _pkgconfig("--cflags", "Qt6Widgets")
+    qt_libs   = _pkgconfig("--libs",   "Qt6Widgets")
+    if not qt_cflags and not qt_libs:
+        qt_cflags = _pkgconfig("--cflags", "Qt5Widgets")
+        qt_libs   = _pkgconfig("--libs",   "Qt5Widgets")
+    cli_include_dirs += [f[2:] for f in qt_cflags if f.startswith("-I")]
+    cli_compile_args += [f for f in qt_cflags if not f.startswith("-I")]
+    cli_lib_dirs     += [f[2:] for f in qt_libs if f.startswith("-L")]
+    cli_libraries    += [f[2:] for f in qt_libs if f.startswith("-l")]
+    cli_link_args    += [f for f in qt_libs if not f.startswith(("-L", "-l"))]
 
 ext_modules = [
     Extension(
