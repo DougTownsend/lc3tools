@@ -138,7 +138,7 @@ ext_modules = [
 
 setup(
     name="lc3sim",
-    version="0.1.0",
+    version="0.2.0",
     packages=["lc3py"],
     ext_modules=ext_modules,
     cmdclass={"build_ext": build_ext},
