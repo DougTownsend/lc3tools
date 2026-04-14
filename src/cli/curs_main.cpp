@@ -738,25 +738,30 @@ static void ncursesThread(
     using namespace std::chrono_literals;
 
 #ifndef _WIN32
-    // Ensure ncurses can find the terminfo database regardless of how
-    // the library was compiled or where the binary is run from.
-    if (!getenv("TERMINFO")) {
-        for (auto * p : {"/usr/share/terminfo", "/lib/terminfo",
-                         "/usr/lib/terminfo", "/etc/terminfo"}) {
-            if (std::filesystem::is_directory(p)) {
-                setenv("TERMINFO", p, 0);
-                break;
-            }
-        }
+    // Ensure ncurses can find the terminfo database. The bundled ncurses
+    // from manylinux only searches its compiled-in path, so we point it
+    // at ALL common system locations via TERMINFO_DIRS.
+    if (!getenv("TERMINFO_DIRS")) {
+        setenv("TERMINFO_DIRS",
+               "/usr/share/terminfo:/lib/terminfo:"
+               "/usr/lib/terminfo:/etc/terminfo", 0);
     }
     if (!getenv("TERM")) setenv("TERM", "xterm", 0);
 #endif
 
     if (!initscr()) {
-        fprintf(stderr, "Failed to initialize terminal. Try: export TERM=xterm\n");
-        ctrl.quit.store(true);
-        QCoreApplication::quit();
-        return;
+#ifndef _WIN32
+        // If the terminal type isn't found, retry with basic "xterm"
+        setenv("TERM", "xterm", 1);
+        if (!initscr()) {
+#endif
+            fprintf(stderr, "Failed to initialize terminal.\n");
+            ctrl.quit.store(true);
+            QCoreApplication::quit();
+            return;
+#ifndef _WIN32
+        }
+#endif
     }
     cbreak();
     noecho();
