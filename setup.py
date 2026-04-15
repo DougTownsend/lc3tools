@@ -141,6 +141,9 @@ else:
             ).decode().strip()
             qt_lib = os.path.join(brew_qt, "lib")
             qt_fw = os.path.join(qt_lib, "QtCore.framework")
+            print(f"[setup.py] brew Qt prefix: {brew_qt}")
+            print(f"[setup.py] Qt lib dir: {qt_lib} exists={os.path.isdir(qt_lib)}")
+            print(f"[setup.py] QtCore.framework: {qt_fw} exists={os.path.isdir(qt_fw)}")
             if os.path.isdir(qt_fw):
                 # Framework-style Qt (standard on macOS Homebrew)
                 cli_ext_sources = cli_sources
@@ -169,8 +172,8 @@ else:
                         cli_include_dirs.append(d)
                 cli_lib_dirs.append(qt_lib)
                 cli_libraries.extend(['Qt6Core', 'Qt6Gui', 'Qt6Widgets'])
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"[setup.py] macOS Qt detection failed: {e}")
     else:
         # No Qt available — build without lc3pysim (lc3asm and lc3sim still work)
         cli_ext_sources = core_cli_sources
