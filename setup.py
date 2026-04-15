@@ -5,6 +5,23 @@ import glob
 import sys
 import subprocess
 
+import os
+
+# On macOS, Homebrew installs Qt as keg-only — its pkg-config files
+# aren't on the default search path.  Auto-detect and add them.
+if sys.platform == 'darwin':
+    try:
+        brew_qt = subprocess.check_output(
+            ["brew", "--prefix", "qt"], stderr=subprocess.DEVNULL
+        ).decode().strip()
+        qt_pc = os.path.join(brew_qt, "lib", "pkgconfig")
+        if os.path.isdir(qt_pc):
+            pkg_path = os.environ.get("PKG_CONFIG_PATH", "")
+            if qt_pc not in pkg_path:
+                os.environ["PKG_CONFIG_PATH"] = qt_pc + (":" + pkg_path if pkg_path else "")
+    except Exception:
+        pass
+
 def _pkgconfig(*args):
     try:
         out = subprocess.check_output(["pkg-config"] + list(args),
@@ -12,8 +29,6 @@ def _pkgconfig(*args):
         return out.decode().split()
     except Exception:
         return []
-
-import os
 
 compile_args_base = []
 if sys.platform == 'win32':
