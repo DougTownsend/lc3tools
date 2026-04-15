@@ -134,39 +134,43 @@ else:
         cli_link_args    += [f for f in qt_libs if not f.startswith(("-L", "-l"))]
     elif sys.platform == 'darwin':
         # macOS fallback: Homebrew Qt6 doesn't ship pkg-config files.
-        # Derive paths directly from brew --prefix.
+        # Detect Qt frameworks directly from brew --prefix.
         try:
             brew_qt = subprocess.check_output(
                 ["brew", "--prefix", "qt"], stderr=subprocess.DEVNULL
             ).decode().strip()
-            qt_inc = os.path.join(brew_qt, "include")
             qt_lib = os.path.join(brew_qt, "lib")
-            if os.path.isdir(qt_inc):
+            qt_fw = os.path.join(qt_lib, "QtCore.framework")
+            if os.path.isdir(qt_fw):
+                # Framework-style Qt (standard on macOS Homebrew)
                 cli_ext_sources = cli_sources
                 cli_compile_args.append("-DHAS_CURS_MAIN")
                 cli_libraries.append("ncurses")
+                cli_compile_args.append("-F" + qt_lib)
+                cli_link_args += ["-F" + qt_lib,
+                                  "-framework", "QtCore",
+                                  "-framework", "QtGui",
+                                  "-framework", "QtWidgets"]
+                # Framework headers: lib/QtCore.framework/Headers/
+                for sub in ['QtCore', 'QtGui', 'QtWidgets']:
+                    fw_inc = os.path.join(qt_lib, sub + ".framework", "Headers")
+                    if os.path.isdir(fw_inc):
+                        cli_include_dirs.append(fw_inc)
+            elif os.path.isdir(os.path.join(brew_qt, "include")):
+                # Non-framework Qt (rare on macOS)
+                cli_ext_sources = cli_sources
+                cli_compile_args.append("-DHAS_CURS_MAIN")
+                cli_libraries.append("ncurses")
+                qt_inc = os.path.join(brew_qt, "include")
                 cli_include_dirs.append(qt_inc)
                 for sub in ['QtCore', 'QtGui', 'QtWidgets']:
                     d = os.path.join(qt_inc, sub)
                     if os.path.isdir(d):
                         cli_include_dirs.append(d)
                 cli_lib_dirs.append(qt_lib)
-                # Detect Qt version from lib contents
-                if os.path.exists(os.path.join(qt_lib, "QtCore.framework")):
-                    # macOS frameworks — link with -framework
-                    cli_link_args += ["-framework", "QtCore",
-                                     "-framework", "QtGui",
-                                     "-framework", "QtWidgets"]
-                    cli_compile_args += ["-F" + qt_lib]
-                    # Framework headers are at lib/QtCore.framework/Headers
-                    for sub in ['QtCore', 'QtGui', 'QtWidgets']:
-                        fw_inc = os.path.join(qt_lib, sub + ".framework", "Headers")
-                        if os.path.isdir(fw_inc):
-                            cli_include_dirs.append(fw_inc)
-                else:
-                    cli_libraries.extend(['Qt6Core', 'Qt6Gui', 'Qt6Widgets'])
+                cli_libraries.extend(['Qt6Core', 'Qt6Gui', 'Qt6Widgets'])
         except Exception:
-            cli_ext_sources = core_cli_sources
+            pass
     else:
         # No Qt available — build without lc3pysim (lc3asm and lc3sim still work)
         cli_ext_sources = core_cli_sources
