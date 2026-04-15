@@ -152,6 +152,9 @@ PYBIND11_MODULE(core, m) {
         .def("step_out", &lc3::sim::stepOut, "Execute a single instruction")
         .def("randomize", &lc3::sim::randomizeState, "Randomize the simulator memory and regs")
         .def("reinit", &lc3::sim::zeroState, "Reinitialize the simulator")
+        .def("run_until_halt_or_input", &lc3::sim::runUntilHaltOrInput,
+            py::arg("inst_limit") = 0,
+            "Run until PC points to HALT or GETC. Returns true if GETC, false if HALT.")
         
         // Memory and Register Access
         .def("read_psr", &lc3::sim::readPSR, "Read the PSR")

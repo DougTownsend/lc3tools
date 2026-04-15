@@ -78,3 +78,10 @@ class Simulator:
 
     def reinit(self):
         return self.sim.reinit()
+
+    def run_until_halt_or_input(self, inst_limit=0):
+        """Run until PC points to HALT or GETC.
+        Returns True if stopped at GETC, False if stopped at HALT.
+        If already at HALT, does nothing. If already at GETC, steps past
+        it and runs to the next HALT or GETC."""
+        return self.sim.run_until_halt_or_input(inst_limit)
