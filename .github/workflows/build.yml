@@ -34,6 +34,8 @@ jobs:
           CIBW_BEFORE_ALL_LINUX: "yum install -y SDL2-devel ncurses-devel pkgconfig"
           CIBW_BEFORE_ALL_MACOS: "brew install sdl2 pkg-config"
 
+          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=14.0"
+
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
 
