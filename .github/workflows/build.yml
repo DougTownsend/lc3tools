@@ -51,7 +51,7 @@ jobs:
             fi
 
           CIBW_ENVIRONMENT_MACOS: >-
-            MACOSX_DEPLOYMENT_TARGET=${{ matrix.arch == 'x86_64' && '11.0' || '14.0' }}
+            MACOSX_DEPLOYMENT_TARGET=14.0
             PKG_CONFIG_PATH=${{ matrix.arch == 'x86_64' && '/usr/local/lib/pkgconfig' || '' }}
 
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
