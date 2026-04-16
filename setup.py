@@ -122,6 +122,12 @@ else:
         qt_cflags = _pkgconfig("--cflags", "Qt5Widgets")
         qt_libs   = _pkgconfig("--libs",   "Qt5Widgets")
 
+    print(f"[setup.py] pkg-config Qt6Widgets cflags: {_pkgconfig('--cflags', 'Qt6Widgets')}")
+    print(f"[setup.py] pkg-config Qt5Widgets cflags: {_pkgconfig('--cflags', 'Qt5Widgets')}")
+    print(f"[setup.py] qt_cflags={qt_cflags}")
+    print(f"[setup.py] qt_libs={qt_libs}")
+    print(f"[setup.py] PKG_CONFIG_PATH={os.environ.get('PKG_CONFIG_PATH', 'NOT SET')}")
+
     if qt_cflags or qt_libs:
         # Qt found via pkg-config — enable curs_main (lc3pysim TUI)
         cli_ext_sources = cli_sources
