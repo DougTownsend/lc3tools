@@ -33,15 +33,6 @@ pip3 install --upgrade lc3sim --extra-index-url https://DougTownsend.github.io/l
 You should now be able to use `lc3asm`, `lc3sim`, and `lc3pysim` in your
 terminal.
 
-> **Linux:** `lc3pysim` requires the Qt5 runtime for its display window.
-> Install it with:
-> - Ubuntu/Debian: `sudo apt install libqt5widgets5`
-> - Fedora: `sudo dnf install qt5-qtbase`
->
-> `lc3asm` and `lc3sim` work without Qt5.
-
-> **Mac:** `lc3pysim` requires Qt. Install it with: `brew install qt`
-
 ---
 
 ## Build from Source
@@ -110,10 +101,10 @@ Install [Homebrew](https://brew.sh) (Mac's package manager):
 > eval "$(/opt/homebrew/bin/brew shellenv)"
 > ```
 
-Install Python, Qt5, and pkg-config:
+Install Python, SDL2, and pkg-config:
 
 ```bash
-brew install python qt5 pkg-config
+brew install python sdl2 pkg-config
 ```
 
 > **Already have Python from python.org?** That's fine — both can coexist.
@@ -138,13 +129,13 @@ Install the required system packages with your distribution's package manager.
 Ubuntu / Debian:
 
 ```bash
-sudo apt install git python3 python3-pip g++ pkg-config libncurses-dev qtbase5-dev
+sudo apt install git python3 python3-pip g++ pkg-config libncurses-dev libsdl2-dev
 ```
 
 Fedora:
 
 ```bash
-sudo dnf install git python3 python3-pip gcc-c++ pkgconf ncurses-devel qt5-qtbase-devel
+sudo dnf install git python3 python3-pip gcc-c++ pkgconf ncurses-devel SDL2-devel
 ```
 
 Then clone and install:

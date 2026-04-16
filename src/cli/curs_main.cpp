@@ -1,27 +1,18 @@
-// On Windows, PDCurses's <curses.h> pulls in <windows.h> which defines
-// min/max macros that break Qt and the STL.  These must come first.
 #ifdef _WIN32
 #define NOMINMAX
 #define WIN32_LEAN_AND_MEAN
 #endif
 
-// Qt headers must come before curses.h because curses defines
-// 'timeout' as a macro that breaks QTimer::timeout signal.
-#include <QApplication>
-#include <QWidget>
-#include <QPainter>
-#include <QImage>
-#include <QTimer>
-#include <QCloseEvent>
-#include <QKeyEvent>
-#include <QFileDialog>
-#include <QCoreApplication>
+#define SDL_MAIN_HANDLED
+#include <SDL.h>
 
 #ifdef _WIN32
 #include <curses.h>       // PDCurses
 #else
 #include <ncurses.h>
 #endif
+
+#include "tinyfiledialogs.h"
 #include <atomic>
 #include <mutex>
 #include <thread>
@@ -205,75 +196,7 @@ struct FileManager {
     std::atomic<bool> open_dialog_done{false};
 };
 
-// ============================================================
-// Qt5 Display Window
-// ============================================================
-class LC3Display : public QWidget {
-public:
-    LC3Display(DisplayCache & dc, SimCtrl & ctrl, FileManager & fm)
-        : QWidget(nullptr), dc_(dc), ctrl_(ctrl), fm_(fm)
-    {
-        setWindowTitle("LC-3 Display");
-        setFixedSize(DISP_W * 2, DISP_H * 2);
-        setAttribute(Qt::WA_QuitOnClose, false);
-        timer_ = new QTimer(this);
-        connect(timer_, &QTimer::timeout, this, [this]{ tick(); });
-        timer_->start(33);
-    }
-
-protected:
-    void paintEvent(QPaintEvent *) override {
-        QPainter p(this);
-        std::lock_guard<std::mutex> lk(dc_.mu);
-        QImage img(dc_.fb, DISP_W, DISP_H, DISP_W * 3, QImage::Format_RGB888);
-        p.drawImage(rect(), img);
-    }
-    void closeEvent(QCloseEvent * e) override {
-        ctrl_.display_on.store(false, std::memory_order_relaxed);
-        hide();
-        e->ignore();
-    }
-    void keyPressEvent(QKeyEvent * e) override {
-        int key = -1;
-        // Map Qt keys to the values the ncurses thread expects.
-        if (e->key() == Qt::Key_Escape)     key = 27;
-        else if (e->key() == Qt::Key_Return || e->key() == Qt::Key_Enter) key = 10;
-        else if (e->key() == Qt::Key_Backspace) key = 127;
-        else {
-            QString txt = e->text();
-            if (!txt.isEmpty()) key = txt.at(0).unicode();
-        }
-        if (key > 0) ctrl_.pushKey(key);
-    }
-
-private:
-    DisplayCache & dc_;
-    SimCtrl & ctrl_;
-    FileManager & fm_;
-    QTimer * timer_;
-
-    void tick() {
-        bool on = ctrl_.display_on.load(std::memory_order_relaxed);
-        if (on && !isVisible()) show();
-        else if (!on && isVisible()) hide();
-        if (on) update();
-        if (ctrl_.quit.load(std::memory_order_relaxed))
-            QCoreApplication::quit();
-        // Handle file-open dialog request from ncurses thread
-        if (fm_.open_dialog_req.exchange(false)) {
-            QStringList paths = QFileDialog::getOpenFileNames(
-                nullptr, "Open LC-3 Files", QString(),
-                "LC-3 Files (*.asm *.obj);;All Files (*)");
-            {
-                std::lock_guard<std::mutex> lk(fm_.result_mu);
-                fm_.open_dialog_result.clear();
-                for (auto & p : paths)
-                    fm_.open_dialog_result.push_back(p.toStdString());
-            }
-            fm_.open_dialog_done.store(true);
-        }
-    }
-};
+// (Qt display class removed — SDL2 main loop handles display/input/dialogs)
 
 // ============================================================
 // Register string formatting
@@ -744,7 +667,7 @@ static void ncursesThread(
 #endif
             fprintf(stderr, "Failed to initialize terminal.\n");
             ctrl.quit.store(true);
-            QCoreApplication::quit();
+            ctrl.quit.store(true);
             return;
 #ifndef _WIN32
         }
@@ -1152,8 +1075,8 @@ static void ncursesThread(
         std::this_thread::sleep_for(std::chrono::milliseconds(33));
     }
 
-    // Signal Qt to exit
-    QCoreApplication::quit();
+    // Signal main SDL loop to exit
+    ctrl.quit.store(true);
 
     delwin(reg_win);
     delwin(mem_win);
@@ -1209,36 +1132,123 @@ int curs_main(std::vector<std::string> args, std::string /* python_exe */) {
     // Simulator (must exist before threads start)
     lc3::sim sim(printer, inputter, 1);
 
-    // Qt must live on the main thread
-    int    fake_argc   = 1;
-    char   prog_name[] = "lc3pysim";
-    char * fake_argv[] = {prog_name, nullptr};
-    QApplication app(fake_argc, fake_argv);
-    app.setQuitOnLastWindowClosed(false);
-    LC3Display * display = new LC3Display(dc, ctrl, fm);
-    (void)display;
+    // SDL2 initialization (main thread)
+    SDL_SetMainReady();
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS) != 0) {
+        fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
+        return 1;
+    }
 
-    // Sim thread: runs the LC-3 simulator (no display work)
+    SDL_Window * window = SDL_CreateWindow(
+        "LC-3 Display",
+        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+        DISP_W * 2, DISP_H * 2,
+        SDL_WINDOW_HIDDEN);
+    SDL_Renderer * renderer = SDL_CreateRenderer(
+        window, -1, SDL_RENDERER_ACCELERATED);
+    SDL_Texture * texture = SDL_CreateTexture(
+        renderer, SDL_PIXELFORMAT_RGB24, SDL_TEXTUREACCESS_STREAMING,
+        DISP_W, DISP_H);
+    bool window_visible = false;
+
+    // Start worker threads
     std::thread sim_thr(simThread,
         std::ref(sim), std::ref(printer), std::ref(ctrl),
         std::ref(uid), std::ref(console),
         std::ref(mvp), std::ref(fm));
 
-    // Display thread: reads flat_mem directly and converts to RGB
     std::thread disp_thr(displayThread,
         std::ref(sim), std::ref(ctrl), std::ref(dc));
 
-    // TUI thread: ncurses rendering and keyboard input
     std::thread ncurses_thr(ncursesThread,
         std::ref(inputter), std::ref(ctrl), std::ref(uid),
         std::ref(console), std::ref(mvp), std::ref(fm));
 
-    app.exec();          // blocks until QCoreApplication::quit()
+    // SDL event loop (main thread)
+    while (!ctrl.quit.load(std::memory_order_relaxed)) {
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev)) {
+            switch (ev.type) {
+            case SDL_QUIT:
+                ctrl.quit.store(true, std::memory_order_release);
+                break;
+            case SDL_WINDOWEVENT:
+                if (ev.window.event == SDL_WINDOWEVENT_CLOSE) {
+                    ctrl.display_on.store(false, std::memory_order_relaxed);
+                    SDL_HideWindow(window);
+                    window_visible = false;
+                }
+                break;
+            case SDL_KEYDOWN: {
+                int key = -1;
+                SDL_Keycode sym = ev.key.keysym.sym;
+                if      (sym == SDLK_ESCAPE)    key = 27;
+                else if (sym == SDLK_RETURN || sym == SDLK_KP_ENTER) key = 10;
+                else if (sym == SDLK_BACKSPACE) key = 127;
+                if (key > 0) ctrl.pushKey(key);
+                break;
+            }
+            case SDL_TEXTINPUT: {
+                // Printable characters (handles shift/caps correctly)
+                char c = ev.text.text[0];
+                if (c >= 1 && c < 127) ctrl.pushKey((int)c);
+                break;
+            }
+            }
+        }
 
-    ctrl.quit.store(true, std::memory_order_release);
+        // Show/hide window
+        bool want_on = ctrl.display_on.load(std::memory_order_relaxed);
+        if (want_on && !window_visible) {
+            SDL_ShowWindow(window);
+            window_visible = true;
+        } else if (!want_on && window_visible) {
+            SDL_HideWindow(window);
+            window_visible = false;
+        }
+
+        // Render display if visible
+        if (window_visible) {
+            {
+                std::lock_guard<std::mutex> lk(dc.mu);
+                SDL_UpdateTexture(texture, nullptr, dc.fb, DISP_W * 3);
+            }
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, nullptr, nullptr);
+            SDL_RenderPresent(renderer);
+        }
+
+        // Handle file-open dialog request from ncurses thread
+        if (fm.open_dialog_req.exchange(false)) {
+            char const * filters[] = {"*.asm", "*.obj"};
+            char const * result = tinyfd_openFileDialog(
+                "Open LC-3 Files", "", 2, filters,
+                "LC-3 Files (*.asm, *.obj)", 1);
+            {
+                std::lock_guard<std::mutex> lk(fm.result_mu);
+                fm.open_dialog_result.clear();
+                if (result) {
+                    std::istringstream ss(result);
+                    std::string path;
+                    while (std::getline(ss, path, '|'))
+                        if (!path.empty()) fm.open_dialog_result.push_back(path);
+                }
+            }
+            fm.open_dialog_done.store(true);
+        }
+
+        SDL_Delay(33);
+    }
+
+    // Cleanup
     ncurses_thr.join();
     disp_thr.join();
     sim_thr.join();
+
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
 
     return 0;
 }
