@@ -13,7 +13,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, macos-14]
+        include:
+          - os: ubuntu-22.04
+            arch: ""
+          - os: macos-14
+            arch: arm64
+          - os: macos-14
+            arch: x86_64
 
     steps:
       - uses: actions/checkout@v4
@@ -30,11 +36,23 @@ jobs:
         env:
           CIBW_BUILD: "cp310-* cp311-* cp312-* cp313-* cp314-*"
           CIBW_SKIP: "*-musllinux* *-manylinux_i686"
+          CIBW_ARCHS_MACOS: ${{ matrix.arch }}
 
           CIBW_BEFORE_ALL_LINUX: "yum install -y SDL2-devel ncurses-devel pkgconfig"
-          CIBW_BEFORE_ALL_MACOS: "brew install sdl2 pkg-config"
 
-          CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=14.0"
+          # arm64: use native Homebrew at /opt/homebrew
+          # x86_64: install a second x86_64 Homebrew at /usr/local via Rosetta
+          CIBW_BEFORE_ALL_MACOS: >-
+            if [ "$(uname -m)" = "arm64" ] && [ "${{ matrix.arch }}" = "x86_64" ]; then
+              arch -x86_64 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" &&
+              arch -x86_64 /usr/local/bin/brew install sdl2 pkg-config;
+            else
+              brew install sdl2 pkg-config;
+            fi
+
+          CIBW_ENVIRONMENT_MACOS: >-
+            MACOSX_DEPLOYMENT_TARGET=${{ matrix.arch == 'x86_64' && '11.0' || '14.0' }}
+            PKG_CONFIG_PATH=${{ matrix.arch == 'x86_64' && '/usr/local/lib/pkgconfig' || '' }}
 
           CIBW_MANYLINUX_X86_64_IMAGE: manylinux_2_28
           CIBW_MANYLINUX_AARCH64_IMAGE: manylinux_2_28
@@ -44,7 +62,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wheels-${{ matrix.os }}
+          name: wheels-${{ matrix.os }}-${{ matrix.arch || 'x64' }}
           path: wheelhouse/*.whl
 
   # ── Windows MSI installer ────────────────────────────────
