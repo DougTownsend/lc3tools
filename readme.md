@@ -27,7 +27,7 @@ Make sure Python is installed (see platform specific installation instructions b
 Also make sure to uninstall the `lc3py` package if you installed it previously. It has been renamed to `lc3sim` to avoid a name collision with another python package. Run `pip3 uninstall lc3py`. You will only need to do this once. From then on, you can just use the following command to update the simulator.
 
 ```
-pip3 install --upgrade lc3sim --extra-index-url https://DougTownsend.github.io/lc3tools/simple/
+pip3 install --force-reinstall lc3sim --extra-index-url https://DougTownsend.github.io/lc3tools/simple/
 ```
 
 You should now be able to use `lc3asm`, `lc3sim`, and `lc3pysim` in your
