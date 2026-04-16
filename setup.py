@@ -67,7 +67,8 @@ if sys.platform == 'win32':
             cli_include_dirs.append(sdl2_inc)
             cli_include_dirs.append(os.path.join(vroot, 'include'))
             cli_lib_dirs.append(os.path.join(vroot, 'lib'))
-            cli_libraries.extend(['SDL2', 'pdcurses'])
+            cli_libraries.extend(['SDL2', 'pdcurses',
+                                  'user32', 'comdlg32', 'ole32', 'shell32'])
 else:
     # Unix: enable curs_main with ncurses + SDL2
     sdl2_cflags = _pkgconfig("--cflags", "sdl2")
