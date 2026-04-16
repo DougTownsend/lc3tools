@@ -31,7 +31,7 @@ backend_sources = [
     *glob.glob("src/common/*.cpp"),
 ]
 
-cli_sources = glob.glob("src/cli/*.cpp") + glob.glob("src/cli/*.c")
+cli_sources = glob.glob("src/cli/*.cpp")
 
 # curs_main.cpp uses ncurses + SDL2 — only compile when both are available
 core_cli_sources = [s for s in cli_sources
@@ -67,7 +67,7 @@ if sys.platform == 'win32':
             cli_include_dirs.append(sdl2_inc)
             cli_include_dirs.append(os.path.join(vroot, 'include'))
             cli_lib_dirs.append(os.path.join(vroot, 'lib'))
-            cli_libraries.extend(['SDL2', 'SDL2main', 'pdcurses'])
+            cli_libraries.extend(['SDL2', 'pdcurses'])
 else:
     # Unix: enable curs_main with ncurses + SDL2
     sdl2_cflags = _pkgconfig("--cflags", "sdl2")
