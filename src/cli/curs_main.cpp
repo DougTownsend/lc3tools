@@ -478,23 +478,30 @@ static void simThread(
         // Smart reassembly: only reassemble files whose mtime has changed
         if (ctrl.reassemble_req.exchange(false)) {
             bool any_assembled = false;
-            std::lock_guard<std::mutex> lk(fm.mu);
-            for (auto & fi : fm.files) {
-                if (fi.asm_path.empty()) continue;
-                try {
-                    auto cur_mtime = std::filesystem::last_write_time(fi.asm_path);
-                    if (cur_mtime == fi.last_mtime) continue;
-                    fi.last_mtime = cur_mtime;
-                } catch (...) { continue; }
-                lc3::as assembler(printer, 1, false);
-                auto result = assembler.assemble(fi.asm_path);
-                if (result) {
-                    any_assembled = true;
-                    for (auto & [name, addr] : result->second)
-                        fm.symbols[(uint16_t)addr] = name;
+            bool any_attempted = false;
+            {
+                std::lock_guard<std::mutex> lk(fm.mu);
+                for (auto & fi : fm.files) {
+                    if (fi.asm_path.empty()) continue;
+                    try {
+                        auto cur_mtime = std::filesystem::last_write_time(fi.asm_path);
+                        if (cur_mtime == fi.last_mtime) continue;
+                        fi.last_mtime = cur_mtime;
+                    } catch (...) { continue; }
+                    any_attempted = true;
+                    lc3::as assembler(printer, 4, false);
+                    auto result = assembler.assemble(fi.asm_path);
+                    if (result) {
+                        any_assembled = true;
+                        for (auto & [name, addr] : result->second)
+                            fm.symbols[(uint16_t)addr] = name;
+                    }
                 }
             }
-            if (!any_assembled)
+            // Flush assembler output (success messages and errors) to the console
+            std::string asm_out = printer.drain();
+            if (!asm_out.empty()) console.append(asm_out);
+            if (!any_attempted)
                 console.append("No files have been modified since last assembly.\n");
         }
 
