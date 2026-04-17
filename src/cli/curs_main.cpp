@@ -998,16 +998,27 @@ static void ncursesThread(
                     mode = UIMode::BREAK;
                 } else if (key == 10 || key == 13 || key == KEY_ENTER) {
                     try {
+                        // Format matches the assembler:
+                        //   decimal:   42    -1   #42
+                        //   hex:       x2A   x-10 (minus goes AFTER the 'x')
                         std::string s = mem_data_input;
-                        // Skip optional leading '-' then detect hex/dec
-                        bool neg = !s.empty() && s[0] == '-';
-                        std::string body = neg ? s.substr(1) : s;
                         int base = 10;
-                        if (!body.empty() && (body[0] == 'x' || body[0] == 'X')) {
+                        bool neg = false;
+                        if (!s.empty() && (s[0] == 'x' || s[0] == 'X')) {
                             base = 16;
-                            body = body.substr(1);
+                            s = s.substr(1);
+                            if (!s.empty() && s[0] == '-') {
+                                neg = true;
+                                s = s.substr(1);
+                            }
+                        } else {
+                            if (!s.empty() && s[0] == '#') s = s.substr(1);
+                            if (!s.empty() && s[0] == '-') {
+                                neg = true;
+                                s = s.substr(1);
+                            }
                         }
-                        long val = std::stol(body, nullptr, base);
+                        long val = std::stol(s, nullptr, base);
                         if (neg) val = -val;
                         uint16_t u = (uint16_t)(val & 0xFFFF);
                         {
