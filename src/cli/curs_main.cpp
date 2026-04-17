@@ -29,6 +29,8 @@
 #include <functional>
 #include <filesystem>
 #include <map>
+#include <fstream>
+#include <iostream>
 
 #include "interface.h"
 #include "printer.h"
@@ -120,8 +122,18 @@ struct ConsoleState {
     void append(const std::string & s) {
         std::lock_guard<std::mutex> lk(mu);
         if (lines.empty()) lines.push_back("");
-        for (char c : s) {
+        // Strip ANSI CSI escape sequences (ESC '[' ... <letter>) so ncurses
+        // doesn't render them as garbage.  The assembler emits these for
+        // bold/color formatting, which is meaningless inside an ncurses window.
+        for (size_t i = 0; i < s.size(); i++) {
+            char c = s[i];
             if (c == '\0') continue;
+            if (c == 0x1B && i + 1 < s.size() && s[i + 1] == '[') {
+                // Skip until we find the final byte (0x40-0x7E)
+                i += 2;
+                while (i < s.size() && !(s[i] >= 0x40 && s[i] <= 0x7E)) i++;
+                continue;
+            }
             if (c == '\n') { lines.push_back(""); }
             else            { lines.back() += c; }
         }
@@ -458,7 +470,7 @@ static void simThread(
                 if (p.size() >= 4 && p.substr(p.size()-4) == ".asm") {
                     fi.asm_path = p;
                     fi.obj_path = p.substr(0, p.size()-4) + ".obj";
-                    lc3::as assembler(printer, 1, false);
+                    lc3::as assembler(printer, 4, false);
                     auto result = assembler.assemble(fi.asm_path);
                     if (result) {
                         for (auto & [name, addr] : result->second)
@@ -472,6 +484,9 @@ static void simThread(
                 sim.loadObjFile(fi.obj_path);
                 { std::lock_guard<std::mutex> lk(fm.mu); fm.files.push_back(fi); }
             }
+            // Flush assembler output (including errors) to the console
+            std::string asm_out = printer.drain();
+            if (!asm_out.empty()) console.append(asm_out);
             sim.writePC(0x3000);
         }
 
@@ -483,22 +498,22 @@ static void simThread(
                 std::lock_guard<std::mutex> lk(fm.mu);
                 for (auto & fi : fm.files) {
                     if (fi.asm_path.empty()) continue;
+                    std::filesystem::file_time_type cur_mtime;
                     try {
-                        auto cur_mtime = std::filesystem::last_write_time(fi.asm_path);
-                        if (cur_mtime == fi.last_mtime) continue;
-                        fi.last_mtime = cur_mtime;
+                        cur_mtime = std::filesystem::last_write_time(fi.asm_path);
                     } catch (...) { continue; }
+                    if (cur_mtime == fi.last_mtime) continue;
                     any_attempted = true;
                     lc3::as assembler(printer, 4, false);
                     auto result = assembler.assemble(fi.asm_path);
                     if (result) {
                         any_assembled = true;
+                        fi.last_mtime = cur_mtime;
                         for (auto & [name, addr] : result->second)
                             fm.symbols[(uint16_t)addr] = name;
                     }
                 }
             }
-            // Flush assembler output (success messages and errors) to the console
             std::string asm_out = printer.drain();
             if (!asm_out.empty()) console.append(asm_out);
             if (!any_attempted)
@@ -1097,7 +1112,145 @@ static void ncursesThread(
 // ============================================================
 // Entry point
 // ============================================================
+// Non-interactive test mode: runs a script of commands instead of the TUI.
+// Script commands (one per line, # is comment):
+//   key <char>       - simulate a single key press ('a', 'q', etc.)
+//   sleep <ms>       - sleep for N milliseconds
+//   shell <cmd>      - run a shell command (e.g. to modify a file)
+//   print            - dump the console buffer to stdout
+//   quit             - signal quit and exit the loop
+static int testMain(std::vector<std::string> file_args,
+                    const std::string & script_path)
+{
+    CursePrinter    printer;
+    CurseInputter   inputter;
+    SimCtrl         ctrl;
+    UIData          uid;
+    ConsoleState    console;
+    MemViewParams   mvp;
+    FileManager     fm;
+
+    // Parse file args (same as curs_main)
+    for (auto & a : file_args) {
+        FileInfo fi;
+        fi.path = a;
+        if (a.size() >= 4 && a.substr(a.size()-4) == ".asm") {
+            fi.asm_path = a;
+            fi.obj_path = a.substr(0, a.size()-4) + ".obj";
+            lc3::as assembler(printer, 4, false);
+            auto result = assembler.assemble(fi.asm_path);
+            if (result) {
+                for (auto & [name, addr] : result->second)
+                    fm.symbols[(uint16_t)addr] = name;
+            }
+            try { fi.last_mtime = std::filesystem::last_write_time(fi.asm_path); }
+            catch (...) {}
+        } else if (a.size() >= 4 && a.substr(a.size()-4) == ".obj") {
+            fi.obj_path = a;
+        } else {
+            continue;
+        }
+        fm.files.push_back(fi);
+    }
+    std::string startup_out = printer.drain();
+    if (!startup_out.empty()) console.append(startup_out);
+
+    lc3::sim sim(printer, inputter, 1);
+
+    std::thread sim_thr(simThread,
+        std::ref(sim), std::ref(printer), std::ref(ctrl),
+        std::ref(uid), std::ref(console),
+        std::ref(mvp), std::ref(fm));
+
+    auto drain_console = [&]() {
+        std::deque<std::string> lines;
+        { std::lock_guard<std::mutex> lk(console.mu); lines = console.lines; console.lines.clear(); }
+        for (auto & l : lines) std::cout << l << "\n";
+        std::cout.flush();
+    };
+
+    // Map a key character to the ctrl flags the ncurses thread would set
+    auto press_key = [&](char k) {
+        switch (k) {
+            case 'a':
+                ctrl.reassemble_req.store(true);
+                ctrl.restart_req.store(true);
+                break;
+            case 'r': ctrl.run_mode.store(true); break;
+            case 's': ctrl.step_in_req.store(true); break;
+            case 'S': ctrl.step_over_req.store(true); break;
+            case 'e': ctrl.restart_req.store(true); break;
+            case 'c': ctrl.clear_console_req.store(true); break;
+            case 'q': ctrl.quit.store(true); break;
+            default:
+                // Send as keyboard input to simulator
+                inputter.push(k);
+                break;
+        }
+    };
+
+    std::ifstream script(script_path);
+    if (!script.is_open()) {
+        std::cerr << "Cannot open script: " << script_path << "\n";
+        ctrl.quit.store(true);
+        sim_thr.join();
+        return 1;
+    }
+
+    std::cout << "[test mode] Script: " << script_path << "\n";
+    drain_console();
+
+    std::string line;
+    while (std::getline(script, line)) {
+        // Trim leading whitespace
+        size_t start = line.find_first_not_of(" \t");
+        if (start == std::string::npos) continue;
+        line = line.substr(start);
+        if (line.empty() || line[0] == '#') continue;
+
+        std::cout << "[test] " << line << "\n";
+
+        if (line.rfind("key ", 0) == 0 && line.size() > 4) {
+            press_key(line[4]);
+        } else if (line.rfind("sleep ", 0) == 0) {
+            int ms = std::atoi(line.c_str() + 6);
+            std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+        } else if (line.rfind("shell ", 0) == 0) {
+            int rc = std::system(line.c_str() + 6);
+            std::cout << "[test] shell exit " << rc << "\n";
+        } else if (line == "print") {
+            drain_console();
+        } else if (line == "quit") {
+            ctrl.quit.store(true);
+            break;
+        } else {
+            std::cout << "[test] unknown command: " << line << "\n";
+        }
+        drain_console();
+    }
+
+    // Final drain + exit
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    drain_console();
+    ctrl.quit.store(true);
+    sim_thr.join();
+    return 0;
+}
+
 int curs_main(std::vector<std::string> args, std::string /* python_exe */) {
+    // Check for --test <script> before normal TUI setup
+    for (size_t i = 1; i + 1 < args.size(); i++) {
+        if (args[i] == "--test") {
+            std::string script_path = args[i + 1];
+            std::vector<std::string> file_args;
+            for (size_t j = 1; j < args.size(); j++) {
+                if (j == i || j == i + 1) continue;
+                file_args.push_back(args[j]);
+            }
+            return testMain(file_args, script_path);
+        }
+    }
+
     // Shared state
     CursePrinter    printer;
     CurseInputter   inputter;
@@ -1117,7 +1270,7 @@ int curs_main(std::vector<std::string> args, std::string /* python_exe */) {
             fi.asm_path = a;
             fi.obj_path = a.substr(0, a.size()-4) + ".obj";
             // Assemble on startup
-            lc3::as assembler(printer, 1, false);
+            lc3::as assembler(printer, 4, false);
             auto result = assembler.assemble(fi.asm_path);
             if (result) {
                 for (auto & [name, addr] : result->second)
