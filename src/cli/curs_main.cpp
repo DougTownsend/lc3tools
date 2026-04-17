@@ -169,6 +169,10 @@ struct SimCtrl {
     std::vector<uint16_t> bp_remove;
     std::vector<uint16_t> active_bps;  // maintained by sim thread only
 
+    // Pending memory writes from the 'm' hotkey. Applied by sim thread.
+    std::mutex mem_write_mu;
+    std::vector<std::pair<uint16_t, uint16_t>> mem_writes;
+
     // Keys forwarded from the Qt display window to the ncurses thread.
     std::mutex key_mu;
     std::queue<int> key_queue;
@@ -332,11 +336,14 @@ static std::string formatMem(lc3::sim & sim, int rows, int cols,
 // ============================================================
 // Hotkey string (word-wrapped)
 // ============================================================
-enum class UIMode { BREAK, RUNNING, SET_BREAKPOINT, SET_BASEADDR };
+enum class UIMode { BREAK, RUNNING, SET_BREAKPOINT, SET_BASEADDR,
+                    MODIFY_MEM_ADDR, MODIFY_MEM_DATA };
 
 static std::string hotkeyStr(UIMode mode, bool mem_locked,
                               const std::string & bp_input,
                               const std::string & addr_input,
+                              const std::string & mem_addr_input,
+                              const std::string & mem_data_input,
                               int width)
 {
     std::string s;
@@ -344,12 +351,16 @@ static std::string hotkeyStr(UIMode mode, bool mem_locked,
         s = "Input forwarded to LC3 keyboard. Press [Esc] to pause.";
     } else if (mode == UIMode::BREAK) {
         std::string lk = mem_locked ? "unlock" : "lock";
-        s = "s:step-in S:step-over r:run q:quit b:breakpoints g:goto-address "
+        s = "s:step-in S:step-over r:run q:quit b:breakpoints g:goto-address m:modify-mem "
             "a:reassemble o:open-file x:close-file h:split-left l:split-right e:restart "
             "c:clear-console n:" + lk + "-mem k:scroll-up j:scroll-down "
             "PgUp/PgDn:console-scroll d:toggle-display";
     } else if (mode == UIMode::SET_BREAKPOINT) {
         s = "Enter address to toggle breakpoint: " + bp_input;
+    } else if (mode == UIMode::MODIFY_MEM_ADDR) {
+        s = "Enter hex address to modify: " + mem_addr_input;
+    } else if (mode == UIMode::MODIFY_MEM_DATA) {
+        s = "Enter value (decimal, or hex with 'x' prefix): " + mem_data_input;
     } else {
         s = "Enter new starting address for memory window: " + addr_input;
     }
@@ -536,6 +547,14 @@ static void simThread(
             console.clear_all();
 
         apply_bps();
+
+        // Apply pending memory writes from the 'm' hotkey
+        {
+            std::lock_guard<std::mutex> lk(ctrl.mem_write_mu);
+            for (auto & [addr, value] : ctrl.mem_writes)
+                sim.writeMem(addr, value);
+            ctrl.mem_writes.clear();
+        }
 
         bool running = ctrl.run_mode.load(std::memory_order_acquire);
         bool halted;
@@ -737,6 +756,9 @@ static void ncursesThread(
     UIMode      mode           = UIMode::BREAK;
     std::string bp_input;
     std::string addr_input;
+    std::string mem_addr_input;   // address being entered for 'm' modify-mem
+    std::string mem_data_input;   // value being entered for 'm' modify-mem
+    uint16_t    mem_pending_addr = 0;   // address captured after Enter
     bool        mem_locked     = false;
     int         console_scroll = 0;   // 0 = at bottom, >0 = scrolled up N lines
 
@@ -795,6 +817,7 @@ static void ncursesThread(
 
         // Recompute hotkey height for the new terminal width.
         std::string hk = hotkeyStr(mode, mem_locked, bp_input, addr_input,
+                                   mem_addr_input, mem_data_input,
                                    std::max(1, maxx - col0w - 2));
         int hkl = 1;
         for (char c : hk) if (c == '\n') hkl++;
@@ -913,6 +936,11 @@ static void ncursesThread(
                         break;
                     }
                     case 'g': mode = UIMode::SET_BASEADDR; addr_input.clear(); break;
+                    case 'm':
+                        mode = UIMode::MODIFY_MEM_ADDR;
+                        mem_addr_input.clear();
+                        mem_data_input.clear();
+                        break;
                     case 'd':
                         ctrl.display_on.store(!ctrl.display_on.load(std::memory_order_relaxed));
                         break;
@@ -945,6 +973,54 @@ static void ncursesThread(
                     if (!addr_input.empty()) addr_input.pop_back();
                 } else if (key >= 0 && key < 256 && isprint(key)) {
                     addr_input += (char)key;
+                }
+            } else if (mode == UIMode::MODIFY_MEM_ADDR) {
+                if (key == 27) {  // Esc cancels
+                    mem_addr_input.clear();
+                    mode = UIMode::BREAK;
+                } else if (key == 10 || key == 13 || key == KEY_ENTER) {
+                    try {
+                        mem_pending_addr = (uint16_t)std::stoul(mem_addr_input, nullptr, 16);
+                        mem_addr_input.clear();
+                        mode = UIMode::MODIFY_MEM_DATA;
+                    } catch (...) {
+                        mem_addr_input.clear();
+                        mode = UIMode::BREAK;
+                    }
+                } else if (key == KEY_BACKSPACE || key == 127 || key == 8) {
+                    if (!mem_addr_input.empty()) mem_addr_input.pop_back();
+                } else if (key >= 0 && key < 256 && isprint(key)) {
+                    mem_addr_input += (char)key;
+                }
+            } else if (mode == UIMode::MODIFY_MEM_DATA) {
+                if (key == 27) {  // Esc cancels
+                    mem_data_input.clear();
+                    mode = UIMode::BREAK;
+                } else if (key == 10 || key == 13 || key == KEY_ENTER) {
+                    try {
+                        std::string s = mem_data_input;
+                        // Skip optional leading '-' then detect hex/dec
+                        bool neg = !s.empty() && s[0] == '-';
+                        std::string body = neg ? s.substr(1) : s;
+                        int base = 10;
+                        if (!body.empty() && (body[0] == 'x' || body[0] == 'X')) {
+                            base = 16;
+                            body = body.substr(1);
+                        }
+                        long val = std::stol(body, nullptr, base);
+                        if (neg) val = -val;
+                        uint16_t u = (uint16_t)(val & 0xFFFF);
+                        {
+                            std::lock_guard<std::mutex> lk(ctrl.mem_write_mu);
+                            ctrl.mem_writes.emplace_back(mem_pending_addr, u);
+                        }
+                    } catch (...) {}
+                    mem_data_input.clear();
+                    mode = UIMode::BREAK;
+                } else if (key == KEY_BACKSPACE || key == 127 || key == 8) {
+                    if (!mem_data_input.empty()) mem_data_input.pop_back();
+                } else if (key >= 0 && key < 256 && isprint(key)) {
+                    mem_data_input += (char)key;
                 }
             }
 
@@ -1034,6 +1110,7 @@ static void ncursesThread(
         // Hotkeys
         {
             std::string hk = hotkeyStr(mode, mem_locked, bp_input, addr_input,
+                                       mem_addr_input, mem_data_input,
                                        std::max(1, maxx - col0w - 2));
             int hkl = 1;
             for (char c : hk) if (c == '\n') hkl++;
