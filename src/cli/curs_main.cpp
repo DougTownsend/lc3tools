@@ -810,10 +810,10 @@ static void ncursesThread(
     };
 
     auto do_resize = [&]() {
+        resize_term(0, 0);  // 0,0 = auto-detect; on PDCurses this must come first
         getmaxyx(stdscr, maxy, maxx);
         maxy = std::max(maxy, 20);
         maxx = std::max(maxx, 80);
-        resize_term(maxy, maxx);
 
         // Recompute hotkey height for the new terminal width.
         std::string hk = hotkeyStr(mode, mem_locked, bp_input, addr_input,
@@ -1036,6 +1036,9 @@ static void ncursesThread(
             }
 
             if (key == KEY_RESIZE) do_resize();
+#ifdef _WIN32
+            else if (is_termresized()) do_resize();
+#endif
         }
 
         // --- Render ---
