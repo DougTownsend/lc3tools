@@ -9,6 +9,7 @@ class Simulator:
         self.output = Printer()
         self.asm = Assembler(self.output, 4)
         self.sim = _Simulator(self.output, self.input, 1)
+        self._symbols = {}   # accumulated label → address from assemble()
         if rand:
             self.randomize()
 
@@ -22,14 +23,14 @@ class Simulator:
         self.input.set_input(str)
     
     def assemble(self, asmfile, ret_symtab=False):
-        if not ret_symtab:
-            asm = self.asm.assemble(asmfile)
-            if asm != None:
-                return asm[0]
-            else:
-                return None
-        else:
-            return self.asm.assemble(asmfile)
+        asm = self.asm.assemble(asmfile)
+        if asm is None:
+            return None
+        # Store symbols so exec_jsr() can look up labels
+        self._symbols.update(asm[1])
+        if ret_symtab:
+            return asm
+        return asm[0]
 
     def load_obj(self, objfile):
         return self.sim.load_object_file(objfile)
@@ -85,3 +86,43 @@ class Simulator:
         If already at HALT, does nothing. If already at GETC, steps past
         it and runs to the next HALT or GETC."""
         return self.sim.run_until_halt_or_input(inst_limit)
+
+    def exec_jsr(self, target, inst_limit=1000000):
+        """Execute a subroutine as if JSR had been called to it.
+
+        target: either a label string (e.g. "draw") or an integer address.
+                Labels are looked up in symbols from prior assemble() calls.
+        inst_limit: safety cap on instructions (default 1M) to avoid
+                    hanging on infinite loops.
+
+        Sets R7 to a sentinel address, sets PC to the subroutine, and runs
+        until the subroutine's RET jumps back to the sentinel. Useful for
+        autograder tests that set up registers/memory, invoke a student
+        subroutine, and then inspect the effects.
+
+        Returns True if the subroutine returned normally, False if the
+        instruction limit was hit (likely infinite loop or missing RET).
+        """
+        if isinstance(target, str):
+            # Labels are case-insensitive in LC-3 assembly
+            key = target.lower()
+            match = {k.lower(): v for k, v in self._symbols.items()}.get(key)
+            if match is None:
+                raise KeyError(f"Label {target!r} not found. Assemble the "
+                               f"source file first with sim.assemble(...).")
+            addr = match
+        else:
+            addr = int(target)
+
+        # Sentinel: the interrupt vector at 0x0000. Not executed in normal
+        # user code, so a breakpoint here is safe.
+        SENTINEL = 0x0000
+
+        self.sim.write_reg(7, SENTINEL)
+        self.sim.set_pc(addr)
+        self.sim.set_breakpoint(SENTINEL)
+        self.sim.set_inst_limit(inst_limit)
+        self.sim.run()
+        self.sim.remove_breakpoint(SENTINEL)
+
+        return not self.sim.exceeded_inst_limit()

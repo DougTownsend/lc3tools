@@ -155,6 +155,8 @@ PYBIND11_MODULE(core, m) {
         .def("run_until_halt_or_input", &lc3::sim::runUntilHaltOrInput,
             py::arg("inst_limit") = 0,
             "Run until PC points to HALT or GETC. Returns true if GETC, false if HALT.")
+        .def("set_breakpoint", &lc3::sim::setBreakpoint, "Set a breakpoint at the given address")
+        .def("remove_breakpoint", &lc3::sim::removeBreakpoint, "Remove a breakpoint at the given address")
         
         // Memory and Register Access
         .def("read_psr", &lc3::sim::readPSR, "Read the PSR")
