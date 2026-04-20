@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lc3sim"
-version = "0.2.0"
+version = "0.3.1"
 description = "Python bindings for LC-3 Tools"
 requires-python = ">=3.7"
 dependencies = []
